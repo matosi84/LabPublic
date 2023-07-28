@@ -1,13 +1,16 @@
-function Send-ApplicationInsightsLog {
+function Send-ApplicationInsightsLogWithUserManagedIdentity {
     param (
-        [string]$InstrumentationKey,
+        [string]$AppInsightsResourceId,
         [string]$LogMessage
     )
 
-    $uri = "https://$InstrumentationKey.ods.opinsights.azure.com/api/logs?api-version=1.0"
+    # Pobieramy token uwierzytelniający dla użytkownika zarządzanego przez Identity
+    $token = (Get-AzAccessToken -ResourceUrl $AppInsightsResourceId).Token
+
+    $uri = "https://api.applicationinsights.io/v1/apps/$AppInsightsResourceId/logs"
 
     $headers = @{
-        "Authorization" = "Bearer $InstrumentationKey"
+        "Authorization" = "Bearer $token"
     }
 
     $body = @{
@@ -24,7 +27,7 @@ function Send-ApplicationInsightsLog {
 }
 
 
-$instrumentationKey = "TU_WPISZ_SWÓJ_INSTRUMENTATION_KEY"
-$logMessage = "To jest testowy log wysłany do Application Insights."
+$appInsightsResourceId = "/subscriptions/{subID}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{appInsightsName}"
+$logMessage = "To jest testowy log wysłany do Application Insights za pomocą użytkownika zarządzanego przez Identity."
 
-Send-ApplicationInsightsLog -InstrumentationKey $instrumentationKey -LogMessage $logMessage
+Send-ApplicationInsightsLogWithUserManagedIdentity -AppInsightsResourceId $appInsightsResourceId -LogMessage $logMessage
