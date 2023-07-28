@@ -1,28 +1,22 @@
-function Send-ApplicationInsightsLogWithManagedIdentity {
+function Send-ApplicationInsightsLogWithUserAssignedManagedIdentity {
     param (
         [string]$AppInsightsResourceId,
+        [string]$UserAssignedManagedIdentityClientId,
         [string]$LogMessage
     )
-
-    $accessToken = az account get-access-token --resource=https://api.applicationinsights.io --output json --query 'accessToken' -o tsv
-
-    if (-not $accessToken) {
-        Write-Host "Błąd: Nie można uzyskać tokena uwierzytelniającego dla Identity zarządzanego przez środowisko wykonawcze."
-        return
-    }
 
     $uri = "https://api.applicationinsights.io/v1/apps/$AppInsightsResourceId/logs"
 
     $headers = @{
-        "Authorization" = "Bearer $accessToken"
+        "Authorization" = "Bearer $UserAssignedManagedIdentityClientId"
     }
 
-    $body = @{
+    $logData = @{
         "message" = $LogMessage
     }
 
     try {
-        $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method 'POST' -Body (ConvertTo-Json $body)
+        $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method 'POST' -Body (ConvertTo-Json $logData)
         Write-Host "Testowy log został wysłany do Application Insights."
     }
     catch {
@@ -32,6 +26,7 @@ function Send-ApplicationInsightsLogWithManagedIdentity {
 
 
 $appInsightsResourceId = "/subscriptions/{subID}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{appInsightsName}"
-$logMessage = "To jest testowy log wysłany do Application Insights za pomocą Identity zarządzanego przez środowisko wykonawcze."
+$userAssignedManagedIdentityClientId = "TWOJE_IDENTITY_CLIENT_ID"  # ID klienta Identity zarządzanego przez użytkownika przypisanego do zasobu
+$logMessage = "To jest testowy log wysłany do Application Insights przy użyciu Identity zarządzanego przez użytkownika przypisanego do zasobu."
 
-Send-ApplicationInsightsLogWithManagedIdentity -AppInsightsResourceId $appInsightsResourceId -LogMessage $logMessage
+Send-ApplicationInsightsLogWithUserAssignedManagedIdentity -AppInsightsResourceId $appInsightsResourceId -UserAssignedManagedIdentityClientId $userAssignedManagedIdentityClientId -LogMessage $logMessage
