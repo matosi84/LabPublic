@@ -1,0 +1,30 @@
+function Send-ApplicationInsightsLog {
+    param (
+        [string]$InstrumentationKey,
+        [string]$LogMessage
+    )
+
+    $uri = "https://$InstrumentationKey.ods.opinsights.azure.com/api/logs?api-version=1.0"
+
+    $headers = @{
+        "Authorization" = "Bearer $InstrumentationKey"
+    }
+
+    $body = @{
+        "message" = $LogMessage
+    }
+
+    try {
+        $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method 'POST' -Body (ConvertTo-Json $body)
+        Write-Host "Testowy log został wysłany do Application Insights."
+    }
+    catch {
+        Write-Host "Wystąpił błąd podczas wysyłania logu: $_"
+    }
+}
+
+
+$instrumentationKey = "TU_WPISZ_SWÓJ_INSTRUMENTATION_KEY"
+$logMessage = "To jest testowy log wysłany do Application Insights."
+
+Send-ApplicationInsightsLog -InstrumentationKey $instrumentationKey -LogMessage $logMessage
