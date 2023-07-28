@@ -1,34 +1,20 @@
-function Get-AzureManagedIdentityToken {
-    param (
-        [string]$identityClientId,
-        [string]$resource
-    )
-
-    $url = "http://169.254.169.254/metadata/identity/oauth2/token"
-    $params = @{
-        resource = $resource
-        client_id = $identityClientId
-        api_version = "2018-02-01"
-    }
-
-    $response = Invoke-RestMethod -Uri $url -Headers @{ Metadata = "true" } -Method GET -Body $params
-    return $response.access_token
-}
-
 function Send-ApplicationInsightsLogWithManagedIdentity {
     param (
         [string]$AppInsightsResourceId,
-        [string]$ManagedIdentityClientId,
         [string]$LogMessage
     )
 
-    # Pobieramy token uwierzytelniający dla użytkownika zarządzanego przez Identity
-    $token = Get-AzureManagedIdentityToken -identityClientId $ManagedIdentityClientId -resource $AppInsightsResourceId
+    $accessToken = Get-AzAccessToken -ResourceUrl "https://api.applicationinsights.io" -ErrorAction SilentlyContinue
+
+    if (-not $accessToken) {
+        Write-Host "Błąd: Nie można uzyskać tokena uwierzytelniającego dla Identity zarządzanego przez środowisko wykonywania."
+        return
+    }
 
     $uri = "https://api.applicationinsights.io/v1/apps/$AppInsightsResourceId/logs"
 
     $headers = @{
-        "Authorization" = "Bearer $token"
+        "Authorization" = "Bearer $($accessToken.Token)"
     }
 
     $body = @{
@@ -45,8 +31,8 @@ function Send-ApplicationInsightsLogWithManagedIdentity {
 }
 
 
-$appInsightsResourceId = "/subscriptions/{subID}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{appInsightsName}"
-$managedIdentityClientId = "TU_WPISZ_IDENTYFIKATOR_KLIENTA_UZYTKOWNIKA_ZARZADZANEGO_PRZEZ_IDENTITY"
-$logMessage = "To jest testowy log wysłany do Application Insights za pomocą użytkownika zarządzanego przez Identity."
 
-Send-ApplicationInsightsLogWithManagedIdentity -AppInsightsResourceId $appInsightsResourceId -ManagedIdentityClientId $managedIdentityClientId -LogMessage $logMessage
+$appInsightsResourceId = "/subscriptions/{subID}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{appInsightsName}"
+$logMessage = "To jest testowy log wysłany do Application Insights za pomocą Identity zarządzanego przez środowisko wykonywania."
+
+Send-ApplicationInsightsLogWithManagedIdentity -AppInsightsResourceId $appInsightsResourceId -LogMessage $logMessage
