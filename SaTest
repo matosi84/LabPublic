@@ -38,7 +38,7 @@ function Get-ManagedIdentityAccessToken {
         $body = $payload | ConvertTo-Json
 
         # Make the HTTP request to get the access token
-        $response = Invoke-RestMethod -Uri "$identityEndpoint?api-version=2019-08-01&resource=$ResourceId" -Headers @{ "Metadata" = "true" } -Method POST -Body $body
+        $response = Invoke-RestMethod -Uri $identityEndpoint -Headers @{ "Metadata" = "true" } -Method POST -Body $body
 
         $accessToken = $response.access_token
         return $accessToken
