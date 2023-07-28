@@ -1,7 +1,8 @@
-function Send-FileToAzureStorageAccountWithManagedIdentity {
+function Send-FileAndCreateContainerWithManagedIdentity {
     param (
         [string]$StorageAccountName,
-        [string]$FileLocalPath
+        [string]$FileLocalPath,
+        [string]$ContainerName
     )
 
     # Get the User Managed Identity access token
@@ -12,17 +13,13 @@ function Send-FileToAzureStorageAccountWithManagedIdentity {
         return
     }
 
-    # Get the container name and blob name from the file path
-    $containerName = (Get-Item -Path $FileLocalPath).Directory.Name
-    $blobName = (Get-Item -Path $FileLocalPath).Name
-
     # Create the container if it doesn't exist
-    Create-StorageContainerIfNotExists -StorageAccountName $StorageAccountName -ContainerName $containerName -AccessToken $accessToken
+    Create-StorageContainerIfNotExists -StorageAccountName $StorageAccountName -ContainerName $ContainerName -AccessToken $accessToken
 
     # Upload the file to the container
-    Upload-FileToStorageContainer -StorageAccountName $StorageAccountName -ContainerName $containerName -BlobName $blobName -LocalFilePath $FileLocalPath -AccessToken $accessToken
+    Upload-FileToStorageContainer -StorageAccountName $StorageAccountName -ContainerName $ContainerName -BlobName (Split-Path $FileLocalPath -Leaf) -LocalFilePath $FileLocalPath -AccessToken $accessToken
 
-    Write-Host "File '$FileLocalPath' sent to container '$containerName' in Storage Account '$StorageAccountName'."
+    Write-Host "File '$FileLocalPath' sent to container '$ContainerName' in Storage Account '$StorageAccountName'."
 }
 
 function Get-ManagedIdentityAccessToken {
@@ -30,9 +27,8 @@ function Get-ManagedIdentityAccessToken {
         [string]$ResourceId
     )
 
-    # Get the identity endpoint and token from the environment
-    $identityEndpoint = $env:IDENTITY_ENDPOINT
-    $identityHeader = $env:IDENTITY_HEADER
+    # Define the identity endpoint
+    $identityEndpoint = "http://169.254.169.254/metadata/identity/oauth2/token"
 
     try {
         # Create a JSON payload for the HTTP request
@@ -42,7 +38,7 @@ function Get-ManagedIdentityAccessToken {
         $body = $payload | ConvertTo-Json
 
         # Make the HTTP request to get the access token
-        $response = Invoke-RestMethod -Uri "$identityEndpoint?api-version=2019-08-01&resource=$ResourceId" -Headers @{ "X-IDENTITY-HEADER" = $identityHeader } -Method POST -Body $body
+        $response = Invoke-RestMethod -Uri "$identityEndpoint?api-version=2019-08-01&resource=$ResourceId" -Headers @{ "Metadata" = "true" } -Method POST -Body $body
 
         $accessToken = $response.access_token
         return $accessToken
@@ -58,5 +54,6 @@ function Get-ManagedIdentityAccessToken {
 # Parameters
 $StorageAccountName = "YOUR_STORAGE_ACCOUNT_NAME"
 $FileLocalPath = "LOCAL_FILE_PATH.txt"
+$ContainerName = "YOUR_CONTAINER_NAME"
 
-Send-FileToAzureStorageAccountWithManagedIdentity -StorageAccountName $StorageAccountName -FileLocalPath $FileLocalPath
+Send-FileAndCreateContainerWithManagedIdentity -StorageAccountName $StorageAccountName -FileLocalPath $FileLocalPath -ContainerName $ContainerName
