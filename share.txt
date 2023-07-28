@@ -4,17 +4,17 @@ function Send-ApplicationInsightsLogWithManagedIdentity {
         [string]$LogMessage
     )
 
-    $accessToken = Get-AzAccessToken -ResourceUrl "https://api.applicationinsights.io" -ErrorAction SilentlyContinue
+    $accessToken = az account get-access-token --resource=https://api.applicationinsights.io --output json --query 'accessToken' -o tsv
 
     if (-not $accessToken) {
-        Write-Host "Błąd: Nie można uzyskać tokena uwierzytelniającego dla Identity zarządzanego przez środowisko wykonywania."
+        Write-Host "Błąd: Nie można uzyskać tokena uwierzytelniającego dla Identity zarządzanego przez środowisko wykonawcze."
         return
     }
 
     $uri = "https://api.applicationinsights.io/v1/apps/$AppInsightsResourceId/logs"
 
     $headers = @{
-        "Authorization" = "Bearer $($accessToken.Token)"
+        "Authorization" = "Bearer $accessToken"
     }
 
     $body = @{
@@ -31,8 +31,7 @@ function Send-ApplicationInsightsLogWithManagedIdentity {
 }
 
 
-
 $appInsightsResourceId = "/subscriptions/{subID}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{appInsightsName}"
-$logMessage = "To jest testowy log wysłany do Application Insights za pomocą Identity zarządzanego przez środowisko wykonywania."
+$logMessage = "To jest testowy log wysłany do Application Insights za pomocą Identity zarządzanego przez środowisko wykonawcze."
 
 Send-ApplicationInsightsLogWithManagedIdentity -AppInsightsResourceId $appInsightsResourceId -LogMessage $logMessage
