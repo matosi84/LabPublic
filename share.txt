@@ -1,11 +1,29 @@
-function Send-ApplicationInsightsLogWithUserManagedIdentity {
+function Get-AzureManagedIdentityToken {
+    param (
+        [string]$identityClientId,
+        [string]$resource
+    )
+
+    $url = "http://169.254.169.254/metadata/identity/oauth2/token"
+    $params = @{
+        resource = $resource
+        client_id = $identityClientId
+        api_version = "2018-02-01"
+    }
+
+    $response = Invoke-RestMethod -Uri $url -Headers @{ Metadata = "true" } -Method GET -Body $params
+    return $response.access_token
+}
+
+function Send-ApplicationInsightsLogWithManagedIdentity {
     param (
         [string]$AppInsightsResourceId,
+        [string]$ManagedIdentityClientId,
         [string]$LogMessage
     )
 
     # Pobieramy token uwierzytelniający dla użytkownika zarządzanego przez Identity
-    $token = (Get-AzAccessToken -ResourceUrl $AppInsightsResourceId).Token
+    $token = Get-AzureManagedIdentityToken -identityClientId $ManagedIdentityClientId -resource $AppInsightsResourceId
 
     $uri = "https://api.applicationinsights.io/v1/apps/$AppInsightsResourceId/logs"
 
@@ -28,6 +46,7 @@ function Send-ApplicationInsightsLogWithUserManagedIdentity {
 
 
 $appInsightsResourceId = "/subscriptions/{subID}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{appInsightsName}"
+$managedIdentityClientId = "TU_WPISZ_IDENTYFIKATOR_KLIENTA_UZYTKOWNIKA_ZARZADZANEGO_PRZEZ_IDENTITY"
 $logMessage = "To jest testowy log wysłany do Application Insights za pomocą użytkownika zarządzanego przez Identity."
 
-Send-ApplicationInsightsLogWithUserManagedIdentity -AppInsightsResourceId $appInsightsResourceId -LogMessage $logMessage
+Send-ApplicationInsightsLogWithManagedIdentity -AppInsightsResourceId $appInsightsResourceId -ManagedIdentityClientId $managedIdentityClientId -LogMessage $logMessage
