@@ -1,0 +1,54 @@
+function Send-ApplicationInsightsLogWithUserAssignedManagedIdentity {
+    param (
+        [string]$AppInsightsResourceId,
+        [string]$UserAssignedManagedIdentityClientId,
+        [string]$LogMessage
+    )
+
+    # Get the identity endpoint and token from the environment
+    $identityEndpoint = $env:IDENTITY_ENDPOINT
+    $identityHeader = $env:IDENTITY_HEADER
+
+    # Create a JSON payload for the HTTP request
+    $payload = @{
+        resource = "https://api.applicationinsights.io"
+        client_id = $UserAssignedManagedIdentityClientId
+        scope = "https://api.applicationinsights.io/.default"
+    }
+    $body = $payload | ConvertTo-Json
+
+    # Make the HTTP request to get the access token
+    $response = Invoke-RestMethod -Uri "$identityEndpoint?api-version=2019-08-01&resource=https://api.applicationinsights.io" -Headers @{ "X-IDENTITY-HEADER" = $identityHeader } -Method POST -Body $body
+
+    $accessToken = $response.access_token
+
+    if (-not $accessToken) {
+        Write-Host "Error: Unable to get access token for User Managed Identity."
+        return
+    }
+
+    $uri = "https://api.applicationinsights.io/v1/apps/$AppInsightsResourceId/logs"
+
+    $headers = @{
+        "Authorization" = "Bearer $accessToken"
+    }
+
+    $logData = @{
+        "message" = $LogMessage
+    }
+
+    try {
+        $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method 'POST' -Body (ConvertTo-Json $logData)
+        Write-Host "Test log sent to Application Insights."
+    }
+    catch {
+        Write-Host "Error occurred while sending log: $_"
+    }
+}
+
+
+$appInsightsResourceId = "/subscriptions/{subID}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{appInsightsName}"
+$userAssignedManagedIdentityClientId = "YOUR_IDENTITY_CLIENT_ID"  # User Managed Identity Client ID
+$logMessage = "This is a test log sent to Application Insights using User Managed Identity."
+
+Send-ApplicationInsightsLogWithUserAssignedManagedIdentity -AppInsightsResourceId $appInsightsResourceId -UserAssignedManagedIdentityClientId $userAssignedManagedIdentityClientId -LogMessage $logMessage
