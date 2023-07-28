@@ -34,63 +34,26 @@ function Get-ManagedIdentityAccessToken {
     $identityEndpoint = $env:IDENTITY_ENDPOINT
     $identityHeader = $env:IDENTITY_HEADER
 
-    # Create a JSON payload for the HTTP request
-    $payload = @{
-        resource = $ResourceId
-    }
-    $body = $payload | ConvertTo-Json
-
-    # Make the HTTP request to get the access token
-    $response = Invoke-RestMethod -Uri "$identityEndpoint?api-version=2019-08-01&resource=$ResourceId" -Headers @{ "X-IDENTITY-HEADER" = $identityHeader } -Method POST -Body $body
-
-    $accessToken = $response.access_token
-
-    return $accessToken
-}
-
-function Create-StorageContainerIfNotExists {
-    param (
-        [string]$StorageAccountName,
-        [string]$ContainerName,
-        [string]$AccessToken
-    )
-
-    $containerUrl = "https://$StorageAccountName.blob.core.windows.net/$ContainerName"
-    $containerHeaders = @{
-        "x-ms-version" = "2020-06-12"
-        "Authorization" = "Bearer $AccessToken"
-    }
-
     try {
-        $response = Invoke-RestMethod -Uri $containerUrl -Headers $containerHeaders -Method Head
-        Write-Host "Container '$ContainerName' already exists in Storage Account '$StorageAccountName'."
+        # Create a JSON payload for the HTTP request
+        $payload = @{
+            resource = $ResourceId
+        }
+        $body = $payload | ConvertTo-Json
+
+        # Make the HTTP request to get the access token
+        $response = Invoke-RestMethod -Uri "$identityEndpoint?api-version=2019-08-01&resource=$ResourceId" -Headers @{ "X-IDENTITY-HEADER" = $identityHeader } -Method POST -Body $body
+
+        $accessToken = $response.access_token
+        return $accessToken
     }
     catch {
-        # If the container doesn't exist, create it
-        $containerHeaders.Add("x-ms-blob-public-access", "container")
-        Invoke-RestMethod -Uri $containerUrl -Headers $containerHeaders -Method Put
-        Write-Host "New container created: $ContainerName in Storage Account '$StorageAccountName'."
+        Write-Host "Error occurred while obtaining access token: $_"
+        return $null
     }
 }
 
-function Upload-FileToStorageContainer {
-    param (
-        [string]$StorageAccountName,
-        [string]$ContainerName,
-        [string]$BlobName,
-        [string]$LocalFilePath,
-        [string]$AccessToken
-    )
-
-    $fileUrl = "https://$StorageAccountName.blob.core.windows.net/$ContainerName/$BlobName"
-    $fileHeaders = @{
-        "x-ms-version" = "2020-06-12"
-        "Authorization" = "Bearer $AccessToken"
-        "x-ms-blob-type" = "BlockBlob"
-    }
-
-    Invoke-RestMethod -Uri $fileUrl -Headers $fileHeaders -Method Put -InFile $LocalFilePath
-}
+# ... (rest of the functions remain the same)
 
 # Parameters
 $StorageAccountName = "YOUR_STORAGE_ACCOUNT_NAME"
