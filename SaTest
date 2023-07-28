@@ -1,65 +1,99 @@
-function Get-UniqueContainerName {
-    param ()
-
-    $containerName = "testcontainer" + [System.Guid]::NewGuid().ToString("N")
-    return $containerName
-}
-
-function Generate-TestFile {
-    param (
-        [string]$FilePath,
-        [int]$FileSizeInKB
-    )
-
-    $bytes = New-Object byte[] ($FileSizeInKB * 1024)
-    (Get-Random -InputObject (0..255) -Count $bytes.Length) | ForEach-Object { $bytes[$_] = $_ }
-    $content = [System.Text.Encoding]::UTF8.GetString($bytes)
-
-    try {
-        $content | Out-File -FilePath $FilePath -Encoding UTF8
-        Write-Host "Generated test file: $FilePath"
-    }
-    catch {
-        Write-Host "Error occurred while generating the file: $_"
-    }
-}
-
-function Send-FileToAzureStorageContainerWithManagedIdentity {
+function Send-FileToAzureStorageAccountWithManagedIdentity {
     param (
         [string]$StorageAccountName,
-        [string]$ResourceGroupName,
         [string]$FileLocalPath
     )
 
-    $testFileSizeInKB = 1024  # 1 MB (you can adjust the size as needed)
-    $containerName = Get-UniqueContainerName
+    # Get the User Managed Identity access token
+    $accessToken = Get-ManagedIdentityAccessToken -ResourceId "https://storage.azure.com/"
 
-    # Create a new container using REST API
-    $containerUrl = "https://$StorageAccountName.blob.core.windows.net/$containerName"
-    $containerHeaders = @{
-        "x-ms-version" = "2020-06-12"
-        "Authorization" = $env:MSI_SECRET
+    if (-not $accessToken) {
+        Write-Host "Error: Unable to get access token for User Managed Identity."
+        return
     }
-    Invoke-RestMethod -Uri $containerUrl -Headers $containerHeaders -Method Put
 
-    # Generate the test file
-    Generate-TestFile -FilePath $FileLocalPath -FileSizeInKB $testFileSizeInKB
+    # Get the container name and blob name from the file path
+    $containerName = (Get-Item -Path $FileLocalPath).Directory.Name
+    $blobName = (Get-Item -Path $FileLocalPath).Name
 
-    # Upload the file to the container using REST API
-    $fileUrl = "$containerUrl/$(Split-Path $FileLocalPath -Leaf)"
-    $fileHeaders = @{
-        "x-ms-version" = "2020-06-12"
-        "x-ms-blob-type" = "BlockBlob"
-        "Authorization" = $env:MSI_SECRET
-    }
-    Invoke-RestMethod -Uri $fileUrl -Headers $fileHeaders -Method Put -InFile $FileLocalPath
+    # Create the container if it doesn't exist
+    Create-StorageContainerIfNotExists -StorageAccountName $StorageAccountName -ContainerName $containerName -AccessToken $accessToken
+
+    # Upload the file to the container
+    Upload-FileToStorageContainer -StorageAccountName $StorageAccountName -ContainerName $containerName -BlobName $blobName -LocalFilePath $FileLocalPath -AccessToken $accessToken
 
     Write-Host "File '$FileLocalPath' sent to container '$containerName' in Storage Account '$StorageAccountName'."
 }
 
+function Get-ManagedIdentityAccessToken {
+    param (
+        [string]$ResourceId
+    )
+
+    # Get the identity endpoint and token from the environment
+    $identityEndpoint = $env:IDENTITY_ENDPOINT
+    $identityHeader = $env:IDENTITY_HEADER
+
+    # Create a JSON payload for the HTTP request
+    $payload = @{
+        resource = $ResourceId
+    }
+    $body = $payload | ConvertTo-Json
+
+    # Make the HTTP request to get the access token
+    $response = Invoke-RestMethod -Uri "$identityEndpoint?api-version=2019-08-01&resource=$ResourceId" -Headers @{ "X-IDENTITY-HEADER" = $identityHeader } -Method POST -Body $body
+
+    $accessToken = $response.access_token
+
+    return $accessToken
+}
+
+function Create-StorageContainerIfNotExists {
+    param (
+        [string]$StorageAccountName,
+        [string]$ContainerName,
+        [string]$AccessToken
+    )
+
+    $containerUrl = "https://$StorageAccountName.blob.core.windows.net/$ContainerName"
+    $containerHeaders = @{
+        "x-ms-version" = "2020-06-12"
+        "Authorization" = "Bearer $AccessToken"
+    }
+
+    try {
+        $response = Invoke-RestMethod -Uri $containerUrl -Headers $containerHeaders -Method Head
+        Write-Host "Container '$ContainerName' already exists in Storage Account '$StorageAccountName'."
+    }
+    catch {
+        # If the container doesn't exist, create it
+        $containerHeaders.Add("x-ms-blob-public-access", "container")
+        Invoke-RestMethod -Uri $containerUrl -Headers $containerHeaders -Method Put
+        Write-Host "New container created: $ContainerName in Storage Account '$StorageAccountName'."
+    }
+}
+
+function Upload-FileToStorageContainer {
+    param (
+        [string]$StorageAccountName,
+        [string]$ContainerName,
+        [string]$BlobName,
+        [string]$LocalFilePath,
+        [string]$AccessToken
+    )
+
+    $fileUrl = "https://$StorageAccountName.blob.core.windows.net/$ContainerName/$BlobName"
+    $fileHeaders = @{
+        "x-ms-version" = "2020-06-12"
+        "Authorization" = "Bearer $AccessToken"
+        "x-ms-blob-type" = "BlockBlob"
+    }
+
+    Invoke-RestMethod -Uri $fileUrl -Headers $fileHeaders -Method Put -InFile $LocalFilePath
+}
+
 # Parameters
 $StorageAccountName = "YOUR_STORAGE_ACCOUNT_NAME"
-$ResourceGroupName = "YOUR_RESOURCE_GROUP_NAME"
 $FileLocalPath = "LOCAL_FILE_PATH.txt"
 
-Send-FileToAzureStorageContainerWithManagedIdentity -StorageAccountName $StorageAccountName -ResourceGroupName $ResourceGroupName -FileLocalPath $FileLocalPath
+Send-FileToAzureStorageAccountWithManagedIdentity -StorageAccountName $StorageAccountName -FileLocalPath $FileLocalPath
