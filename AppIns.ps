@@ -1,0 +1,59 @@
+function Get-AzureADToken {
+    param (
+        [string]$resource = "https://management.azure.com/"
+    )
+
+    $msiEndpoint = $env:MSI_ENDPOINT
+    $msiSecret = $env:MSI_SECRET
+
+    $tokenAuthUri = "$msiEndpoint?resource=$resource&api-version=2017-09-01"
+    $headers = @{
+        "X-IDENTITY-HEADER" = $msiSecret
+    }
+
+    $response = Invoke-RestMethod -Uri $tokenAuthUri -Headers $headers -Method GET
+    return $response.access_token
+}
+
+function Send-LogToApplicationInsights {
+    param (
+        [string]$appId,
+        [string]$instrumentationKey,
+        [string]$logMessage
+    )
+
+    $resource = "https://api.applicationinsights.io/"
+    $token = Get-AzureADToken -resource $resource
+
+    $url = "https://api.applicationinsights.io/v1/apps/$appId/events"
+
+    $headers = @{
+        "Authorization" = "Bearer $token"
+        "Content-Type" = "application/json"
+    }
+
+    $logData = @{
+        "name" = "Test Log"
+        "time" = (Get-Date).ToUniversalTime().ToString("o")
+        "iKey" = $instrumentationKey
+        "tags" = @{
+            "ai.cloud.role" = "TestRole"
+        }
+        "data" = @{
+            "baseType" = "MessageData"
+            "baseData" = @{
+                "message" = $logMessage
+            }
+        }
+    }
+
+    $body = $logData | ConvertTo-Json
+    Invoke-RestMethod -Uri $url -Headers $headers -Body $body -Method POST
+}
+
+# Użycie funkcji
+$appId = "APPLICATION_INSIGHTS_APP_ID" # Wstaw swoje Application Insights App ID
+$instrumentationKey = "INSTRUMENTATION_KEY" # Wstaw klucz Instrumentation Key
+$logMessage = "To jest testowy log wysłany przez PowerShell."
+
+Send-LogToApplicationInsights -appId $appId -instrumentationKey $instrumentationKey -logMessage $logMessage
